@@ -109,10 +109,8 @@ def vote_counts(guild_id: int, recruit_id: int) -> dict[str, int]:
 def can_manage_ctm(member: discord.Member) -> bool:
     if member.guild_permissions.manage_guild:
         return True
-
     if CTM_USER_ID and str(member.id) == CTM_USER_ID:
         return True
-
     if CTM_ROLE_ID:
         try:
             role_id = int(CTM_ROLE_ID)
@@ -120,7 +118,6 @@ def can_manage_ctm(member: discord.Member) -> bool:
             role_id = -1
         if any(role.id == role_id for role in member.roles):
             return True
-
     return False
 
 
@@ -131,14 +128,9 @@ def recruit_embed(row: sqlite3.Row, include_votes: bool = False) -> discord.Embe
         description=f"<@{row['user_id']}>",
         colour=discord.Colour.blurple(),
     )
-
     embed.add_field(name="Active Days", value=str(row["active_days"]), inline=True)
     embed.add_field(name="Activity Hours", value=f"{row['activity_hours']:g}", inline=True)
-    embed.add_field(
-        name="Score",
-        value=f"{total}/25" if total is not None else "Not fully scored",
-        inline=True,
-    )
+    embed.add_field(name="Score", value=f"{total}/25" if total is not None else "Not fully scored", inline=True)
 
     def score_value(name: str) -> str:
         value = row[name]
@@ -158,7 +150,6 @@ def recruit_embed(row: sqlite3.Row, include_votes: bool = False) -> discord.Embe
     if row["recommended_rank"]:
         recommendation += f" — {row['recommended_rank']}"
     embed.add_field(name="CTM Recommendation", value=recommendation, inline=False)
-
     if row["recommendation_notes"]:
         embed.add_field(name="Recommendation Notes", value=row["recommendation_notes"], inline=False)
 
@@ -174,7 +165,6 @@ def recruit_embed(row: sqlite3.Row, include_votes: bool = False) -> discord.Embe
             ),
             inline=False,
         )
-
     embed.set_footer(text="Chief of Training & Membership")
     return embed
 
@@ -184,11 +174,9 @@ class VoteView(discord.ui.View):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         self.recruit_id = recruit_id
-
         self.accept.custom_id = f"ctm_vote:accept:{guild_id}:{recruit_id}"
         self.deny.custom_id = f"ctm_vote:deny:{guild_id}:{recruit_id}"
         self.abstain.custom_id = f"ctm_vote:abstain:{guild_id}:{recruit_id}"
-
         for item in self.children:
             item.disabled = disabled
 
@@ -196,16 +184,13 @@ class VoteView(discord.ui.View):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message("This vote only works inside the server.", ephemeral=True)
             return
-
         row = get_recruit(self.guild_id, self.recruit_id)
         if row is None or not row["vote_open"]:
             await interaction.response.send_message("This vote is closed.", ephemeral=True)
             return
-
         if interaction.user.id == self.recruit_id:
             await interaction.response.send_message("Recruits cannot vote on their own membership.", ephemeral=True)
             return
-
         with connect_db() as conn:
             conn.execute(
                 """
@@ -216,12 +201,8 @@ class VoteView(discord.ui.View):
                 """,
                 (self.guild_id, self.recruit_id, interaction.user.id, choice, now_iso()),
             )
-
         refreshed = get_recruit(self.guild_id, self.recruit_id)
-        await interaction.response.edit_message(
-            embed=recruit_embed(refreshed, include_votes=True),
-            view=self,
-        )
+        await interaction.response.edit_message(embed=recruit_embed(refreshed, include_votes=True), view=self)
         await interaction.followup.send(f"Your vote is now **{choice.title()}**.", ephemeral=True)
 
     @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅", custom_id="placeholder_accept")
@@ -244,7 +225,6 @@ class CTMBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         init_db()
-
         with connect_db() as conn:
             active_votes = conn.execute(
                 """
@@ -253,13 +233,8 @@ class CTMBot(commands.Bot):
                 WHERE vote_open=1 AND vote_message_id IS NOT NULL
                 """
             ).fetchall()
-
         for row in active_votes:
-            self.add_view(
-                VoteView(row["guild_id"], row["user_id"]),
-                message_id=row["vote_message_id"],
-            )
-
+            self.add_view(VoteView(row["guild_id"], row["user_id"]), message_id=row["vote_message_id"])
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
             self.tree.copy_global_to(guild=guild)
@@ -276,14 +251,9 @@ async def require_ctm(interaction: discord.Interaction) -> bool:
     if not interaction.guild or not isinstance(interaction.user, discord.Member):
         await interaction.response.send_message("This command only works inside the server.", ephemeral=True)
         return False
-
     if not can_manage_ctm(interaction.user):
-        await interaction.response.send_message(
-            "You do not have permission to manage CTM recruit records.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message("You do not have permission to manage CTM recruit records.", ephemeral=True)
         return False
-
     return True
 
 
@@ -291,11 +261,9 @@ async def require_ctm(interaction: discord.Interaction) -> bool:
 async def create_recruit(interaction: discord.Interaction, member: discord.Member):
     if not await require_ctm(interaction):
         return
-
     if member.bot:
         await interaction.response.send_message("Bots cannot be recruits.", ephemeral=True)
         return
-
     with connect_db() as conn:
         existing = conn.execute(
             "SELECT 1 FROM recruits WHERE guild_id=? AND user_id=?",
@@ -304,7 +272,6 @@ async def create_recruit(interaction: discord.Interaction, member: discord.Membe
         if existing:
             await interaction.response.send_message("That member already has a recruit record.", ephemeral=True)
             return
-
         conn.execute(
             """
             INSERT INTO recruits (guild_id, user_id, username, created_at)
@@ -312,65 +279,54 @@ async def create_recruit(interaction: discord.Interaction, member: discord.Membe
             """,
             (interaction.guild_id, member.id, str(member), now_iso()),
         )
-
     row = get_recruit(interaction.guild_id, member.id)
     await interaction.response.send_message(embed=recruit_embed(row))
 
 
-@recruit_group.command(name="update", description="Update a recruit's activity and notes")
+@recruit_group.command(name="update", description="Update all recruit activity and notes")
 @app_commands.describe(
     active_days="Total active training days",
     activity_hours="Total meaningful activity hours",
     training_completed="Short summary of completed training",
     strengths="Documented strengths",
     weaknesses="Documented weaknesses",
-    warnings="Warnings or issues; use 'None' to clear",
+    warnings="Warnings or issues; use 'None' if there are none",
 )
 async def update_recruit(
     interaction: discord.Interaction,
     member: discord.Member,
-    active_days: Optional[app_commands.Range[int, 0, 7]] = None,
-    activity_hours: Optional[app_commands.Range[float, 0, 1000]] = None,
-    training_completed: Optional[str] = None,
-    strengths: Optional[str] = None,
-    weaknesses: Optional[str] = None,
-    warnings: Optional[str] = None,
+    active_days: app_commands.Range[int, 0, 7],
+    activity_hours: app_commands.Range[float, 0, 1000],
+    training_completed: str,
+    strengths: str,
+    weaknesses: str,
+    warnings: str,
 ):
     if not await require_ctm(interaction):
         return
-
-    row = get_recruit(interaction.guild_id, member.id)
-    if row is None:
+    if get_recruit(interaction.guild_id, member.id) is None:
         await interaction.response.send_message("That member does not have a recruit record.", ephemeral=True)
         return
 
-    updates = {}
-    if active_days is not None:
-        updates["active_days"] = active_days
-    if activity_hours is not None:
-        updates["activity_hours"] = float(activity_hours)
-    if training_completed is not None:
-        updates["training_completed"] = training_completed
-    if strengths is not None:
-        updates["strengths"] = strengths
-    if weaknesses is not None:
-        updates["weaknesses"] = weaknesses
-    if warnings is not None:
-        updates["warnings"] = "" if warnings.strip().lower() == "none" else warnings
-
-    if not updates:
-        await interaction.response.send_message("Nothing was supplied to update.", ephemeral=True)
-        return
-
-    set_clause = ", ".join(f"{key}=?" for key in updates)
-    values = list(updates.values()) + [interaction.guild_id, member.id]
-
+    warnings_value = "" if warnings.strip().lower() == "none" else warnings
     with connect_db() as conn:
         conn.execute(
-            f"UPDATE recruits SET {set_clause} WHERE guild_id=? AND user_id=?",
-            values,
+            """
+            UPDATE recruits
+            SET active_days=?, activity_hours=?, training_completed=?, strengths=?, weaknesses=?, warnings=?
+            WHERE guild_id=? AND user_id=?
+            """,
+            (
+                active_days,
+                float(activity_hours),
+                training_completed,
+                strengths,
+                weaknesses,
+                warnings_value,
+                interaction.guild_id,
+                member.id,
+            ),
         )
-
     refreshed = get_recruit(interaction.guild_id, member.id)
     await interaction.response.send_message(embed=recruit_embed(refreshed))
 
@@ -387,11 +343,9 @@ async def score_recruit(
 ):
     if not await require_ctm(interaction):
         return
-
     if get_recruit(interaction.guild_id, member.id) is None:
         await interaction.response.send_message("That member does not have a recruit record.", ephemeral=True)
         return
-
     with connect_db() as conn:
         conn.execute(
             """
@@ -401,7 +355,6 @@ async def score_recruit(
             """,
             (conduct, communication, teamwork, knowledge, performance, interaction.guild_id, member.id),
         )
-
     row = get_recruit(interaction.guild_id, member.id)
     await interaction.response.send_message(embed=recruit_embed(row))
 
@@ -412,7 +365,6 @@ async def view_recruit(interaction: discord.Interaction, member: discord.Member)
     if row is None:
         await interaction.response.send_message("That member does not have a recruit record.", ephemeral=True)
         return
-
     await interaction.response.send_message(embed=recruit_embed(row, include_votes=bool(row["vote_message_id"])))
 
 
@@ -438,12 +390,10 @@ async def finalize_recruit(
 ):
     if not await require_ctm(interaction):
         return
-
     row = get_recruit(interaction.guild_id, member.id)
     if row is None:
         await interaction.response.send_message("That member does not have a recruit record.", ephemeral=True)
         return
-
     with connect_db() as conn:
         conn.execute(
             """
@@ -460,7 +410,6 @@ async def finalize_recruit(
                 member.id,
             ),
         )
-
     refreshed = get_recruit(interaction.guild_id, member.id)
     await interaction.response.send_message(
         content="CTM evaluation finalized. The membership vote is still the final acceptance/denial decision.",
@@ -472,28 +421,18 @@ async def finalize_recruit(
 async def open_vote(interaction: discord.Interaction, member: discord.Member):
     if not await require_ctm(interaction):
         return
-
     row = get_recruit(interaction.guild_id, member.id)
     if row is None:
         await interaction.response.send_message("That member does not have a recruit record.", ephemeral=True)
         return
-
     if not row["recommendation"]:
-        await interaction.response.send_message(
-            "Finalize the CTM recommendation before opening the membership vote.",
-            ephemeral=True,
-        )
+        await interaction.response.send_message("Finalize the CTM recommendation before opening the membership vote.", ephemeral=True)
         return
-
     if row["vote_open"]:
         await interaction.response.send_message("A vote is already open for that recruit.", ephemeral=True)
         return
-
     with connect_db() as conn:
-        conn.execute(
-            "DELETE FROM votes WHERE guild_id=? AND recruit_id=?",
-            (interaction.guild_id, member.id),
-        )
+        conn.execute("DELETE FROM votes WHERE guild_id=? AND recruit_id=?", (interaction.guild_id, member.id))
         conn.execute(
             """
             UPDATE recruits
@@ -502,7 +441,6 @@ async def open_vote(interaction: discord.Interaction, member: discord.Member):
             """,
             (interaction.channel_id, interaction.guild_id, member.id),
         )
-
     refreshed = get_recruit(interaction.guild_id, member.id)
     view = VoteView(interaction.guild_id, member.id)
     await interaction.response.send_message(
@@ -510,7 +448,6 @@ async def open_vote(interaction: discord.Interaction, member: discord.Member):
         embed=recruit_embed(refreshed, include_votes=True),
         view=view,
     )
-
     message = await interaction.original_response()
     with connect_db() as conn:
         conn.execute(
@@ -521,7 +458,6 @@ async def open_vote(interaction: discord.Interaction, member: discord.Member):
             """,
             (message.id, interaction.guild_id, member.id),
         )
-
     bot.add_view(view, message_id=message.id)
 
 
@@ -529,41 +465,28 @@ async def open_vote(interaction: discord.Interaction, member: discord.Member):
 async def close_vote(interaction: discord.Interaction, member: discord.Member):
     if not await require_ctm(interaction):
         return
-
     row = get_recruit(interaction.guild_id, member.id)
     if row is None:
         await interaction.response.send_message("That member does not have a recruit record.", ephemeral=True)
         return
-
     if not row["vote_open"]:
         await interaction.response.send_message("There is no open vote for that recruit.", ephemeral=True)
         return
-
     with connect_db() as conn:
         conn.execute(
-            """
-            UPDATE recruits
-            SET vote_open=0
-            WHERE guild_id=? AND user_id=?
-            """,
+            "UPDATE recruits SET vote_open=0 WHERE guild_id=? AND user_id=?",
             (interaction.guild_id, member.id),
         )
-
     refreshed = get_recruit(interaction.guild_id, member.id)
     closed_view = VoteView(interaction.guild_id, member.id, disabled=True)
-
     if row["vote_channel_id"] and row["vote_message_id"]:
         channel = interaction.guild.get_channel(row["vote_channel_id"])
         if channel and hasattr(channel, "fetch_message"):
             try:
                 message = await channel.fetch_message(row["vote_message_id"])
-                await message.edit(
-                    embed=recruit_embed(refreshed, include_votes=True),
-                    view=closed_view,
-                )
+                await message.edit(embed=recruit_embed(refreshed, include_votes=True), view=closed_view)
             except discord.HTTPException:
                 pass
-
     counts = vote_counts(interaction.guild_id, member.id)
     await interaction.response.send_message(
         f"Vote closed for {member.mention}: "
