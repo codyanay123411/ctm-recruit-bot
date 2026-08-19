@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+ctm_recruits.db
+ctm_recruits.db-shm
+ctm_recruits.db-wal
